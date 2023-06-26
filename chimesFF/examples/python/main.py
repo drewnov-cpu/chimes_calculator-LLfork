@@ -31,7 +31,7 @@ import chimescalc_py
 
 # Define helper functions
 
-def get_dist(lx,ly,lz,xrd,ycrd,zcrd,i,j):
+def get_dist(lx,ly,lz,xcrd,ycrd,zcrd,i,j):  # does this work? xrd isnt used.
 
 	r_ij = [None]*3
 	
