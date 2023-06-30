@@ -40,6 +40,7 @@ int split(string line, vector<string> & items)
 }
 
 int main(int argc, char* argv[]) {
+    std::cout << argv[1] << " " << argv[2];
     std::string param_file(argv[1]);
     std::string coord_file(argv[2]);
 
@@ -118,7 +119,7 @@ int main(int argc, char* argv[]) {
 
     //what storage vectors do I need?
 
-    std::vector<double> r_ij;
+    std::vector<double> r_ij(3, 0.0);
     double dist_ij;
     std::vector<int> typ_idxs{0, 0};
     std::vector<int> all_typ_idxs;
@@ -132,7 +133,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-
+    
     //chimes tmps which are necessary to call the compute methods
     
     chimes2BTmp tmp_2b(order_2b);
@@ -154,7 +155,6 @@ int main(int argc, char* argv[]) {
             //forces need to be flattened together to 
             //need to flatten the forces we want together.
             chimes.compute_2B(dist_ij, r_ij, typ_idxs, flat_force, stress, energy, tmp_2b);
-
             //update forces after the call to compute_2B has completed.
             for (int k = 0; k < 3; k++) {
                 forces[i][k] = flat_force[k];
