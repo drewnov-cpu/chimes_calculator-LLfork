@@ -175,12 +175,12 @@ int main(int argc, char* argv[]) {
     std::setprecision(6);
     out_file << std::fixed << energy << "\n";
     //print stress tensor
-    out_file << stress[0]*6.9479 << "\n" << stress[4]*6.9479 << "\n";
-    out_file << stress[8]*6.9479 << "\n" << stress[1]*6.9479 << "\n";
-    out_file << stress[2]*6.9479 << "\n" << stress[5]*6.9479 << "\n";
+    out_file << stress[0]*6.9479/lx/ly/lz << "\n" << stress[4]*6.9479/lx/ly/lz << "\n";
+    out_file << stress[8]*6.9479/lx/ly/lz << "\n" << stress[1]*6.9479/lx/ly/lz << "\n";
+    out_file << stress[2]*6.9479/lx/ly/lz << "\n" << stress[5]*6.9479/lx/ly/lz << "\n";
     //print forces on atoms.
     for (int i = 0; i < natoms; i++) {
-        out_file << std::scientific << forces[i][0] << " " << forces[i][1] << " " << forces[i][2] << "\n";
+        out_file << std::scientific << forces[i][0] << "\n" << forces[i][1] << "\n" << forces[i][2] << "\n";
     }
 
     // for (int i = 0; i < 9; i++) {
