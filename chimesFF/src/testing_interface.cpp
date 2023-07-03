@@ -3,6 +3,7 @@
 #include <vector>
 #include <math.h>
 #include <algorithm>
+#include <iomanip>
 
 #include "chimesFF.h"
 
@@ -105,6 +106,8 @@ int main(int argc, char* argv[]) {
         zcrd.push_back(std::stod(split_input[3]));
     }
 
+    cord_stream.close();
+
     double maxcut_2b = chimes.max_cutoff_2B();
     double maxcut_3b = chimes.max_cutoff_3B();
     double maxcut_4b = chimes.max_cutoff_4B();
@@ -164,14 +167,24 @@ int main(int argc, char* argv[]) {
             //add three and four body interactions after this later.
         }
     }
-    //print the results
-    std::cout << energy << "\n";
+    //print the results to a separate file
+    std::ofstream out_file;
+    out_file.open("single_test_output.txt");
+    // TODO will need to update the naming scheme at some point.
+
+    std::setprecision(6);
+    out_file << std::fixed << energy << "\n";
+    //print stress tensor
+    out_file << stress[0]*6.9479 << "\n" << stress[4]*6.9479 << "\n";
+    out_file << stress[8]*6.9479 << "\n" << stress[1]*6.9479 << "\n";
+    out_file << stress[2]*6.9479 << "\n" << stress[5]*6.9479 << "\n";
+    //print forces on atoms.
     for (int i = 0; i < natoms; i++) {
-        std::cout << forces[i][0] << " " << forces[i][1] << " " << forces[i][2] << "\n";
+        out_file << std::scientific << forces[i][0] << " " << forces[i][1] << " " << forces[i][2] << "\n";
     }
 
-    for (int i = 0; i < 9; i++) {
-        std::cout << stress[i]/lx/ly/lz*6.9479 << "\n";
-    }
+    // for (int i = 0; i < 9; i++) {
+    //    std::cout << stress[i]/lx/ly/lz*6.9479 << "\n";
+    // }
 
 }
