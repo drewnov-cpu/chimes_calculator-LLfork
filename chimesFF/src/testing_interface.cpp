@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
             typ_idxs[1] = all_typ_idxs[j];
             //is there something I am missing to convert from string to
             //integer.
-            std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[j]));
+            std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[i])); // FIXME problem may be occuring here
             flat_force.insert(std::end(flat_force), std::begin(forces[j]), std::end(forces[j]));
             //forces need to be flattened together to 
             //need to flatten the forces we want together.
