@@ -153,15 +153,15 @@ int main(int argc, char* argv[]) {
             typ_idxs[1] = all_typ_idxs[j];
             //is there something I am missing to convert from string to
             //integer.
-            std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[i])); // FIXME problem may be occuring here
+            std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[i]));
             flat_force.insert(std::end(flat_force), std::begin(forces[j]), std::end(forces[j]));
             //forces need to be flattened together to 
             //need to flatten the forces we want together.
             chimes.compute_2B(dist_ij, r_ij, typ_idxs, flat_force, stress, energy, tmp_2b);
             //update forces after the call to compute_2B has completed.
             for (int k = 0; k < 3; k++) {
-                forces[i][k] = flat_force[k];
-                forces[j][k] = flat_force[3 + k];
+                forces[i][k] += flat_force[k];  // this should accumulate due to having multiple atoms?
+                forces[j][k] += flat_force[3 + k];
             }
 
             //add three and four body interactions after this later.
