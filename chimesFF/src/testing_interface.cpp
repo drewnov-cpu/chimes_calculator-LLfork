@@ -160,8 +160,8 @@ int main(int argc, char* argv[]) {
             chimes.compute_2B(dist_ij, r_ij, typ_idxs, flat_force, stress, energy, tmp_2b);
             //update forces after the call to compute_2B has completed.
             for (int k = 0; k < 3; k++) {
-                forces[i][k] += flat_force[k];  // this should accumulate due to having multiple atoms?
-                forces[j][k] += flat_force[3 + k];
+                forces[i][k] = flat_force[k];  // this should accumulate due to having multiple atoms?
+                forces[j][k] = flat_force[3 + k];
             }
 
             //add three and four body interactions after this later.
