@@ -90,14 +90,16 @@ int main(int argc, char* argv[]) {
 
 
     double energy = 0.0;
-    std::vector<double> stress(9, 0.0);
+    std::vector<double> stress(6, 0.0); // RKL: Changed from 9 elements - chimesFF only computes unique stress tensor componenets - see chimesFF.cpp line 1474
+    //Originally using 9 was what led to zeros showing up in the final results,
+    //since not all of them were updated.
     //forces should be natoms by 3
     std::vector<std::vector<double> > forces(natoms, std::vector<double>(3));
     //defaults to zero initialization.
 
     for (int i = 0; i < natoms; i++) {
         //read in each line containing the type
-        //of atom and its coordinates.
+        //of atom and its x y and z coordinates.
         std::getline(cord_stream, input);
         split(input, split_input);
         atoms.push_back(split_input[0]);
@@ -120,12 +122,10 @@ int main(int argc, char* argv[]) {
     int order_3b = chimes.poly_orders[1];
     int order_4b = chimes.poly_orders[2];
 
-    //what storage vectors do I need?
-
-    std::vector<double> r_ij(3, 0.0);
-    double dist_ij;
-    std::vector<int> typ_idxs{0, 0};
-    std::vector<int> all_typ_idxs;
+    std::vector<double> r_ij(3, 0.0); //x,y,z distance
+    double dist_ij; //distance between two atoms.
+    std::vector<int> typ_idxs{0, 0}; //type indexes to be passed to compute calls
+    std::vector<int> all_typ_idxs; //type indexes for each atom.
 
     //need to setup the type index for each atom.
     for (int i = 0; i < natoms; i++) {
@@ -149,19 +149,32 @@ int main(int argc, char* argv[]) {
 
             if (dist_ij >= maxcut)
                 continue;
-            typ_idxs[0] = all_typ_idxs[i]; //isnt this a string????
+            
+            typ_idxs[0] = all_typ_idxs[i];
             typ_idxs[1] = all_typ_idxs[j];
-            //is there something I am missing to convert from string to
-            //integer.
-            std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[i]));
-            flat_force.insert(std::end(flat_force), std::begin(forces[j]), std::end(forces[j]));
+            
+            // RKL: Copying contents of forces into flat forces isn't necessary and leads to double counting when you 
+            //      accumulate forces in the loop over k below. 
+            //      Replaced these two lines with a simpler flat force
+              
+            // std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[i]));
+            // flat_force.insert(std::end(flat_force), std::begin(forces[j]), std::end(forces[j]));
+            
+            std::vector<double > flat_force(6,0);
+            
             //forces need to be flattened together to 
             //need to flatten the forces we want together.
             chimes.compute_2B(dist_ij, r_ij, typ_idxs, flat_force, stress, energy, tmp_2b);
             //update forces after the call to compute_2B has completed.
             for (int k = 0; k < 3; k++) {
-                forces[i][k] = flat_force[k];  // this should accumulate due to having multiple atoms?
-                forces[j][k] = flat_force[3 + k];
+                // RKL: Commented out these lines due to double counting of forces (see comment on line 159 above)
+                //      With the old way of doing this, flat_force would already contain the previous value of forces[j][k],
+                //      so these two lines have the effect of: forces[j][k] += forces[j][k] + <new contributions computed in chimes.compute_2b>
+                // forces[j][k] += flat_force[3 + k];
+                // forces[i][k] += flat_force[k];  // this should accumulate due to having multiple atoms?                
+                forces[i][k] += flat_force[k];  // this should accumulate due to having multiple atoms?
+                forces[j][k] += flat_force[3 + k];
+                
             }
 
             //add three and four body interactions after this later.
@@ -175,16 +188,27 @@ int main(int argc, char* argv[]) {
     std::setprecision(6);
     out_file << std::fixed << energy << "\n";
     //print stress tensor
-    out_file << stress[0]*6.9479/lx/ly/lz << "\n" << stress[4]*6.9479/lx/ly/lz << "\n";
-    out_file << stress[8]*6.9479/lx/ly/lz << "\n" << stress[1]*6.9479/lx/ly/lz << "\n";
-    out_file << stress[2]*6.9479/lx/ly/lz << "\n" << stress[5]*6.9479/lx/ly/lz << "\n";
+    // RKL: Bookkeeping here is a bit off. It's understandably confusing, since the serial_chimes_interace's main.cpp, 
+    //      python's main.cpp, and chimesFF.compute_2B all handle stresses differently.
+    //      in essence, chimes_FF's compute_2b only computes the 6 unique stress tensor components, in the order xx, xy, xz, yy, yz, zz
+    //      whereas the test suite prints them out in the order xx, yy, zz, xy, xz, yz. (see line:
+    // Line 1474 in chimes_calculator/chimesFF/src/chimes_FF.cpp
+    // Line 1071 in chimes_calculator/serial_interface/src/serial_chimes_interface.cpp
+    // Line 155 in chimes_calculator/serial_interface/examples/cpp/main.cpp 
+    // That's been fixed below.
+    
+    
+    out_file << stress[0]*6.9479/lx/ly/lz << "\n"; // xx
+    out_file << stress[3]*6.9479/lx/ly/lz << "\n"; // yy
+    out_file << stress[5]*6.9479/lx/ly/lz << "\n"; // zz
+    out_file << stress[1]*6.9479/lx/ly/lz << "\n"; // xy
+    out_file << stress[2]*6.9479/lx/ly/lz << "\n"; // xz
+    out_file << stress[4]*6.9479/lx/ly/lz << "\n"; // yz
+  
+
     //print forces on atoms.
     for (int i = 0; i < natoms; i++) {
         out_file << std::scientific << forces[i][0] << "\n" << forces[i][1] << "\n" << forces[i][2] << "\n";
     }
-
-    // for (int i = 0; i < 9; i++) {
-    //    std::cout << stress[i]/lx/ly/lz*6.9479 << "\n";
-    // }
 
 }
