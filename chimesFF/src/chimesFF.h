@@ -193,8 +193,8 @@ private:
     vector<vector<string> > trip_params_atm_chems;    //[ntrips][3]    // Gives chemical symbol  for each ATOM in the triplet (i.e. "Si")    
     vector<vector<string> > trip_params_pair_typs;    //[ntrips][3]    // Gives chemical symbols for each PAIR in the triplet (i.e. "SiO")    
         
-    vector<vector<string> > quad_params_atm_chems;    //[quads][3]    // Gives chemical symbol  for each ATOM in the quadruplet (i.e. "Si")    
-    vector<vector<string> > quad_params_pair_typs;    //[quads][3]    // Gives chemical symbols for each PAIR in the quadruplet (i.e. "SiO")            
+    vector<vector<string> > quad_params_atm_chems;    //[quads][4]    // Gives chemical symbol  for each ATOM in the quadruplet (i.e. "Si")    
+    vector<vector<string> > quad_params_pair_typs;    //[quads][6]    // Gives chemical symbols for each PAIR in the quadruplet (i.e. "SiO")            
 
     int n_pair_maps;    // Number of pair maps entries
     int n_trip_maps;    // Number of trip maps entries
@@ -288,6 +288,10 @@ private:
     inline double dr2_3B(const double *dr2, int i, int j, int k, int l) ;
     inline double dr2_4B(const double *dr2, int i, int j, int k, int l) ;
     inline void init_distance_tensor(double *dr2, const vector<double> & dr, int natoms)    ;
+
+    // GPU compute helpers
+    __global__ void compute2B_helper(int ncoeffs, double fcut, double fcut_deriv, double dx_inv,
+    double *chimes_params, int *chimes_pows, double *Tn, double *Tnd, double *force, double *stress);
 };
 
 

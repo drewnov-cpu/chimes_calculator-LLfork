@@ -1401,6 +1401,71 @@ void chimesFF::compute_1B(const int typ_idx, double & energy )
     energy += energy_offsets[typ_idx];
 }
 
+__constant__ double dr_gpu[CHDIM];
+
+__device__ double gpu_energy = 0;
+// make sure to set this right before call to compute methods if that is allowed.
+// use atomic adds to make sure data isnt lost.
+// note that this may become a problem with MPI
+// may need to think of another solution.
+
+__global__ void chimesFF::compute2B_helper(int ncoeffs, double fcut, double fcut_deriv, double dx_inv,
+double *chimes_params, int *chimes_pows, double *Tn, double *Tnd, double *force, double *stress) {
+    // 
+    // this is a lot of arguments - think about if theres a way to break this down into
+    // something nicer.
+    // some of these arguments should probably be const
+    // ncoeffs and fcut can be passed in the calls
+    // chimes_params should already be on the GPU.
+    // force and stress are to be updated
+    // what is the most efficient way to update the force
+    // and stress vectors at the end
+    // idk lets start with making it work and then we can
+    // optimize after that.
+
+    int tx = threadIdx.x;
+    int bx = blockIdx.x;
+    int coeffs = bx * blockDim.x + tx;
+
+    if (coeffs < ncoeffs) {
+        double coeff_val = chimes_params[coeffs];
+        double energy_result = coeff_val * fcut * Tn[ chimes_pows[coeffs] + 1];
+        atomicAdd(&gpu_energy, energy_result);
+
+        double deriv = fcut * Tnd[ chimes_pows[coeffs] + 1 ] + fcut_deriv * Tn[ chimes_pows[coeffs] + 1 ];
+
+        double force_scalar = coeff_val * deriv * dx_inv;
+
+        // will likely want to switch to reductions
+        // to speed this up at some point.
+        // the atomicAdds still have to be done in sequence
+        // which does reduce parallelism but is fine for smaller scales
+        atomicAdd(&(force[0*CHDIM+0]), force_scalar * dr_gpu[0]);
+        atomicAdd(&(force[0*CHDIM+1]), force_scalar * dr_gpu[1]);
+        atomicAdd(&(force[0*CHDIM+2]), force_scalar * dr_gpu[2]);
+
+        atomicAdd(&(force[1*CHDIM+0]), - force_scalar * dr_gpu[0]);
+        atomicAdd(&(force[1*CHDIM+1]), - force_scalar * dr_gpu[1]);
+        atomicAdd(&(force[1*CHDIM+2]), - force_scalar * dr_gpu[2]);
+
+        atomicAdd(&(stress[0]), - force_scalar * dr_gpu[0] * dr_gpu[0]);
+        atomicAdd(&(stress[1]), - force_scalar * dr_gpu[0] * dr_gpu[1]);
+        atomicAdd(&(stress[2]), - force_scalar * dr_gpu[0] * dr_gpu[2]);
+        atomicAdd(&(stress[3]), - force_scalar * dr_gpu[1] * dr_gpu[1]);
+        atomicAdd(&(stress[4]), - force_scalar * dr_gpu[1] * dr_gpu[2]);
+        atomicAdd(&(stress[5]), - force_scalar * dr_gpu[2] * dr_gpu[2]);
+
+        // will likely need some larger 2-body only ones
+        // in order to test this version cause Im not actually
+        // sure how much faster it will be with large numbers of
+        // coefficients.
+
+    }
+    
+
+
+}
+
 // Overload for calls from LAMMPS                 
 void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vector<int> typ_idxs, vector<double> & force, vector<double> & stress, double & energy, chimes2BTmp &tmp)
 {              
@@ -1445,7 +1510,37 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     get_fcut(dx, chimes_2b_cutoff[pair_idx][1], fcut, fcutderiv);
 
     double dx_inv = ( dx > 0.0 ) ? 1.0 / dx : 1e20 ;
+
+    // need to create some C-style arrays to feed into GPU
+    // and receive results.
+
+    // Host and GPU pointers - these all need to be freed
+    // at the end.
+
+    // pointers to get force and stress data back at the end of calculations
+    double *host_stress, *host_force;
+    // device/GPU pointers for the items being transferred over.
+    double *device_chimes_params, *device_Tn, *device_Tnd;
+    int *device_chimes_pows;
+    // GPU memory allocation
+
+    // Start with copying dr to constant memory - it doesnt
+    // change for the duration of the call to the GPU and it 
+    // is used by every single thread.
+
+    cudaMemcpyToSymbol(dr_gpu, dr.data(), CHDIM*sizeof(double));
+
+
+    // Starting the kernel
+
+    // kernel completion - update host memory with results
+
+    // free memory used - be very careful not to cause
+    // memory leaks since this will almost certainly be called
+    // multiple times by host programs - memory leaks
+    // will very rapidly cause out of memory errors.
     
+    /*
     for(int coeffs=0; coeffs<ncoeffs_2b[pair_idx]; coeffs++)
     {
         double coeff_val = chimes_2b_params[pair_idx][coeffs];        
@@ -1478,7 +1573,8 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
         stress[4] -= force_scalar * dr[1] * dr[2]; // yz tensor component
         stress[5] -= force_scalar * dr[2] * dr[2]; // zz tensor component
             
-    }
+    } */
+
 
     double E_penalty = 0.0 ;
     double force_scalar ;
