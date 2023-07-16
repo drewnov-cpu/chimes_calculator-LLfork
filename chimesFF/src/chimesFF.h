@@ -289,9 +289,7 @@ private:
     inline double dr2_4B(const double *dr2, int i, int j, int k, int l) ;
     inline void init_distance_tensor(double *dr2, const vector<double> & dr, int natoms)    ;
 
-    // GPU compute helpers
-    __global__ void compute2B_helper(int ncoeffs, double fcut, double fcut_deriv, double dx_inv,
-    double *chimes_params, int *chimes_pows, double *Tn, double *Tnd, double *force, double *stress);
+    
 };
 
 
