@@ -31,16 +31,25 @@ double *chimes_params, int *chimes_pows, double *Tn, double *Tnd, double *force,
     if (coeffs < ncoeffs) {
         double coeff_val = chimes_params[coeffs];
         double energy_result = coeff_val * fcut * Tn[ chimes_pows[coeffs] + 1];
+        //if (coeffs == 0) {
+            //printf("DR GPU = %f\t%f\t%f\n", dr_gpu[0], dr_gpu[1], dr_gpu[2]);
+        //} // energy result is non-zero, so lets see if the atomicAdd is working.
         atomicAdd(&gpu_energy, energy_result);
+
 
         double deriv = fcut * Tnd[ chimes_pows[coeffs] + 1 ] + fcut_deriv * Tn[ chimes_pows[coeffs] + 1 ];
 
         double force_scalar = coeff_val * deriv * dx_inv;
 
+
         // will likely want to switch to reductions
         // to speed this up at some point.
         // the atomicAdds still have to be done in sequence
         // which does reduce parallelism but is fine for smaller scales
+        if (coeffs == 0) {
+            printf("force = %f\n", force[0]);
+            printf("stress = %f\n", stress[0]);
+        }
         atomicAdd(&(force[0*CHDIM+0]), force_scalar * dr_gpu[0]);
         atomicAdd(&(force[0*CHDIM+1]), force_scalar * dr_gpu[1]);
         atomicAdd(&(force[0*CHDIM+2]), force_scalar * dr_gpu[2]);

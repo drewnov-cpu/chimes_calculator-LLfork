@@ -1467,8 +1467,22 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     // is used by every single thread.
 
     cudaMemcpyToSymbol(dr_gpu, dr.data(), CHDIM*sizeof(double));
+    
+    //for (int i = 0; i < dr.size(); i++) {
+        //printf("dr %d is %f on the cpu\n", i, dr[i]);
+    //}
+
+    //set energy to whatever the input value should be
+    
+    // cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double), cudaMemcpyHostToDevice);
+    // The above isn't necessary for now (or maybe ever?)
 
     // allocate GPU memory for device pointers
+
+    //for (int i = 0; i < stress.size(); i++) {
+        //printf("Stress %d initially = %f\n", i, stress[i]);
+    //}
+    //printf("\n\n\n");
 
     cudaMalloc(&device_chimes_params, chimes_2b_params[pair_idx].size() * sizeof(double));
     cudaMalloc(&device_Tn, Tn.size() * sizeof(double));
@@ -1496,6 +1510,7 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     // Starting the kernel - houston, we are cleared for liftoff
     compute2B_helper<<<dimGrid, dimBlock>>>(ncoeffs_2b[pair_idx], fcut, fcutderiv, dx_inv, device_chimes_params,
     device_chimes_pows, device_Tn, device_Tnd, device_force, device_stress);
+    cudaDeviceSynchronize();  // do not proceed on the CPU until the GPU has finished its calculations.
     // kernel completion - update host memory with results
    
     //allocate memory for our host pointers to receive the newly updated data
@@ -1503,15 +1518,23 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     //in the future when I'm wiser and I'm older
 
     host_stress = (double *)malloc(stress.size() * sizeof(double));
-    host_force = (double *)malloc(force.size()* sizeof(double));
+    host_force = (double *)malloc(force.size() * sizeof(double));
 
     //transfer new force and stress values from the GPU to the CPU
     cudaMemcpy(host_stress, device_stress, stress.size() * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(host_force, device_force, force.size() * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpyFromSymbol(&energy, gpu_energy, sizeof(double));
+    
 
     //update the storage vectors on the host - replace old data with new data from GPU calculations.
-    force = std::vector<double>(host_stress, host_stress + stress.size());
-    stress = std::vector<double>(host_force, host_force + force.size());
+    stress = std::vector<double>(host_stress, host_stress + stress.size());
+    force = std::vector<double>(host_force, host_force + force.size());
+
+
+    //for (int i = 0; i < stress.size(); i++) {
+        //printf("Stress %d final = %f\n", i, stress[i]);
+    //}
+    //printf("\n\n\n");
     // just need to solve getting energy - 
     // https://stackoverflow.com/questions/2619296/how-to-return-a-single-variable-from-a-cuda-kernel-function
     // answers in this thread may be helpful
