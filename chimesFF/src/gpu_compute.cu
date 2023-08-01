@@ -31,9 +31,6 @@ double *chimes_params, int *chimes_pows, double *Tn, double *Tnd, double *force,
     if (coeffs < ncoeffs) {
         double coeff_val = chimes_params[coeffs];
         double energy_result = coeff_val * fcut * Tn[ chimes_pows[coeffs] + 1];
-        //if (coeffs == 0) {
-            //printf("DR GPU = %f\t%f\t%f\n", dr_gpu[0], dr_gpu[1], dr_gpu[2]);
-        //} // energy result is non-zero, so lets see if the atomicAdd is working.
         atomicAdd(&gpu_energy, energy_result);
 
 

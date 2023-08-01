@@ -1468,9 +1468,6 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
 
     cudaMemcpyToSymbol(dr_gpu, dr.data(), CHDIM*sizeof(double));
     
-    //for (int i = 0; i < dr.size(); i++) {
-        //printf("dr %d is %f on the cpu\n", i, dr[i]);
-    //}
 
     //set energy to whatever the input value should be
     
@@ -1478,11 +1475,6 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     // The above isn't necessary for now (or maybe ever?)
 
     // allocate GPU memory for device pointers
-
-    //for (int i = 0; i < stress.size(); i++) {
-        //printf("Stress %d initially = %f\n", i, stress[i]);
-    //}
-    //printf("\n\n\n");
 
     cudaMalloc(&device_chimes_params, chimes_2b_params[pair_idx].size() * sizeof(double));
     cudaMalloc(&device_Tn, Tn.size() * sizeof(double));
@@ -1521,6 +1513,8 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     host_force = (double *)malloc(force.size() * sizeof(double));
 
     //transfer new force and stress values from the GPU to the CPU
+    //perhaps try putting stress.data() in the recieving spot and seeing what happens?  I've never
+    //really tried that before.
     cudaMemcpy(host_stress, device_stress, stress.size() * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(host_force, device_force, force.size() * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpyFromSymbol(&energy, gpu_energy, sizeof(double));
@@ -1531,10 +1525,6 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     force = std::vector<double>(host_force, host_force + force.size());
 
 
-    //for (int i = 0; i < stress.size(); i++) {
-        //printf("Stress %d final = %f\n", i, stress[i]);
-    //}
-    //printf("\n\n\n");
     // just need to solve getting energy - 
     // https://stackoverflow.com/questions/2619296/how-to-return-a-single-variable-from-a-cuda-kernel-function
     // answers in this thread may be helpful
@@ -1551,7 +1541,7 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     cudaFree(device_chimes_params);
     cudaFree(device_Tn);
     cudaFree(device_Tnd);
-    cudaFree(device_chimes_params);
+    cudaFree(device_chimes_pows);
     cudaFree(device_force);
     cudaFree(device_stress);
     
