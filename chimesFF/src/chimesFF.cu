@@ -1465,14 +1465,15 @@ void chimesFF::compute_2B(const double dx, const vector<double> & dr, const vect
     // Start with copying dr to constant memory - it doesnt
     // change for the duration of the call to the GPU and it 
     // is used by every single thread.
-
+   
     cudaMemcpyToSymbol(dr_gpu, dr.data(), CHDIM*sizeof(double));
     
 
     //set energy to whatever the input value should be
-    
-    // cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double), cudaMemcpyHostToDevice);
-    // The above isn't necessary for now (or maybe ever?)
+    //ok this finally transfers properly but I think if I want
+    //to use this for a multi threaded application I need to switch this to
+    //https://stackoverflow.com/a/2620144
+    cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double));
 
     // allocate GPU memory for device pointers
 
