@@ -1650,11 +1650,16 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     vector<double> &Tnd_ik = tmp.Tnd_ik ;
     vector<double> &Tnd_jk = tmp.Tnd_jk ;  // The Chebyshev polymonial derivatives
 
+    //I think I want to store all of these device pointers in a struct of some sort, especially for four body, to cut
+    //down on the number of arguments I have to pass, especially since there is a limit of 32 pointers/256 bytes I think.
+
     // Avoid allocating std::vector quantities.  Heap memory allocation is slow on the GPU.
     // fixed-length C arrays are allocated on the stack.
     double fcut[npairs] ;
     double fcutderiv[npairs] ;
     double deriv[npairs];
+
+    
 
 #if DEBUG == 1  
     if ( dr.size() != 9 )
@@ -1713,6 +1718,102 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     double coeff;
     int powers[npairs] ;
     double force_scalar[npairs] ;
+
+    // GPU IMPLEMENTATION
+
+    // Let the book keeping begin :(
+    
+    // What needs to go to the GPU?
+    // ncoeffs_3b[tripidx] can be passed in the kernel call.
+    // chimes_3b_params[tripidx] needs memcpy
+    // chimes_3b_powers[tripidx] needs memcpy and HAS TO BE FLATTENED :(
+    // flattening this every time may be expensive?  Talk with Professor Lindsey about where else
+    // the chimes_3b_powers is used in the code and if I can set it up to be flat initally.
+    // energy has to be either the __device__ energy that I have been using or it
+    // just needs to be an allocated double, which is what I will have to do if I want it to be MPI capable.
+    // fcut_all can be passed in the kernel call.
+    // fcut array should be sent to constant memory
+    // fcutderiv array should also be sent to constant memory.
+    // fcut2 should also be sent to constant memory.
+    // Wait - I'm not sure how constant memory interacts with MPI calls.
+    // I think it may be fine since at least on the CPU each MPI thing is a
+    // copy and has their own copies of the variables/their own context?
+    // thats a problem for later, its fixable if I am wrong.
+    // dr and dr2_3b should both be sent to constant memory.
+
+
+    // need to create some C-style arrays/pointers to feed into GPU
+    // and receive results.
+    // Host and GPU pointers - these all need to be freed
+    // at the end.
+
+    // host pointers to update stress and force at the end.
+    double *host_stress, *host_force;
+    // device/GPU pointers for the items being transferred over.
+    poly_pointers_3b *device_polys; // I think the whole struct now has to
+    // be copied over to memory, increasing memory accesses?
+    // Maybe more arguments is the answer?
+    // If I do it this way, I pass a pointer to a struct.
+    // I then have a memory access to the struct to get the pointers in the struct.
+    // Or I can pass all of those pointers to the kernel call (assuming they fit)
+    // and they should end up as part of the registers for each thread.
+    // However, that's a lot of arguments... which is usually considered
+    // to be poor practice for other languages at least.  Hmm
+    // Its not that big so I think I start with trying to pass by value
+    // cause looking at the profiling from the two body version the
+    // cudaMalloc and free calls are very expensive.
+
+    double *device_chimes_params, *device_force, *device_stress;
+    // int *device_chimes_pows - need this but would like it to be flattened
+    // before the compute call if possible.
+    
+    device_polys = (poly_pointers_3b *)malloc(sizeof(poly_pointers_3b));
+
+    // Allocate GPU memory for device pointers, including the ones in device_polys.
+    // Ouch this is a lot of malloc calls.
+    // Could put all of these in a struct and then copy the struct to the gpu instead
+    // of sending a struct with pointers to each one - that would cut down on cudaMalloc calls,
+    // but will mean alot of malloc calls on the cpu - I have to think those would be faster
+    // though?
+    // Lets go have lunch and think about this, I dont like making decisions
+    // while hungry.
+
+    cudaMalloc(&device_chimes_params, chimes_3b_params[tripidx].size() * sizeof(double));
+    cudaMalloc(&device_force, force.size() * sizeof(double));
+    cudaMalloc(&device_stress, stress.size() * sizeof(double));
+    // mallocs all done except for powers, which I want to flatten first.
+
+    // Tn and Tnd mallocs
+    cudaMalloc(&device_polys->Tn_ij, Tn_ij.size() * sizeof(double));
+    cudaMalloc(&device_polys->Tn_ik, Tn_ik.size() * sizeof(double));
+    cudaMalloc(&device_polys->Tn_jk, Tn_jk.size() * sizeof(double));
+    cudaMalloc(&device_polys->Tnd_ij, Tnd_ij.size() * sizeof(double));
+    cudaMalloc(&device_polys->Tnd_ik, Tnd_ik.size() * sizeof(double));
+    cudaMalloc(&device_polys->Tnd_jk, Tnd_jk.size() * sizeof(double));
+
+    // Begin transferring memory over to the GPU.
+
+    // Start off with the stuff going over to constant memory.
+    cudaMemcpyToSymbol(fcut_3b, fcut, npairs * sizeof(double));
+    // These arrays should just decay to a pointer, which should make this
+    // acceptable I think.  But make sure to print these out in testing
+    // to make sure the data is actually being transferred.
+    cudaMemcpyToSymbol(fcutderiv_3b, fcutderiv, npairs * sizeof(double));
+    cudaMemcpyToSymbol(fcut2_3b, fcut_2, npairs * sizeof(double));
+    cudaMemcpyToSymbol(dr_3b, dr.data(), dr.size() * sizeof(double));
+    #ifdef USE_DISTANCE_TENSOR
+        cudaMemcpyToSymbol(dr2_3b, dr2, sizeof(dr2_3b));
+    #endif
+    cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double));
+
+    // Memory transfer should now be done - time to do the grid and block dimension setup
+    int blockSize = 512;
+    // Can start with this
+    dim3 dimBlock(blockSize, 1, 1);
+    dim3 dimGrid(ceil((double)ncoeffs_3b[tripidx]/blockSize), 1 , 1);
+
+    // Start the kernel.
+    
     
     for(int coeffs=0; coeffs<ncoeffs_3b[tripidx]; coeffs++)
     {
@@ -1721,6 +1822,12 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
         powers[0] = chimes_3b_powers[tripidx][coeffs][mapped_pair_idx[0]];
         powers[1] = chimes_3b_powers[tripidx][coeffs][mapped_pair_idx[1]];
         powers[2] = chimes_3b_powers[tripidx][coeffs][mapped_pair_idx[2]];
+
+        //GPU implementation notes - since this is small and all of the accesses are constant,
+        //I think I can create a per thread array and the compiler will put them on registers
+        //which will be nice and efficient - however, will need to use memory profiler to make
+        //sure this is actually happening, becasue if it isn't I want to switch to a shared memory
+        //scheme.
         
         energy += coeff * fcut_all * Tn_ij[ powers[0] ] * Tn_ik[ powers[1] ] * Tn_jk[ powers[2] ];    
 
@@ -1728,9 +1835,14 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
         deriv[1] = fcut[1] * Tnd_ik[ powers[1] ] + fcutderiv[1] * Tn_ik[ powers[1] ];
         deriv[2] = fcut[2] * Tnd_jk[ powers[2] ] + fcutderiv[2] * Tn_jk[ powers[2] ];
 
+        // deriv will need to be created on the GPU in the same way as powers, which ever way ends up being more efficient.
+
+
         force_scalar[0]  = coeff * deriv[0] * fcut_2[0] * Tn_ik[powers[1]]  * Tn_jk[powers[2]] ;
         force_scalar[1]  = coeff * deriv[1] * fcut_2[1] * Tn_ij[powers[0]]  * Tn_jk[powers[2]] ;
         force_scalar[2]  = coeff * deriv[2] * fcut_2[2] * Tn_ij[powers[0]]  * Tn_ik[powers[1]] ;
+
+        // force scalar will need to be created on the GPU in the same way as powers and deriv, which ever way ends up being more efficient.
         
         // Accumulate forces/stresses on/from the ij pair
         

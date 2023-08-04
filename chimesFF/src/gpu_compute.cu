@@ -2,7 +2,18 @@
 #include "chimesFF.h"
 #include "gpu_compute.h"   
 
+// 2 body
 __constant__ double dr_gpu[CHDIM];
+
+// 3 body
+__constant__ double fcut_3b[3];
+__constant__ double fcutderiv_3b[3];
+__constant__ double fcut2_3b[3];
+__constant__ double dr_3b[3*CHDIM];
+#ifdef USE_DISTANCE_TENSOR
+    __constant__ double dr2_3b[CHDIM*CHDIM*3*3];
+#endif
+
 
 __device__ double gpu_energy = 0;
 // make sure to set this right before call to compute methods if that is allowed.
@@ -68,4 +79,17 @@ double *chimes_params, int *chimes_pows, double *Tn, double *Tnd, double *force,
     
 
 
+}
+
+
+__global__ void compute3b_helper(int ncoeffs, double *fcut, double *fcutderiv,
+double *chimes_params, int *chimes_pows, double *force, double *stress, poly_pointers_3b cheby) {
+    
+    int tx = threadIdx.x;
+    int bx = blockIdx.x;
+    int coeffs = bx * blockDim.x + tx;
+
+    if (coeffs < ncoeffs) {
+        
+    }
 }
