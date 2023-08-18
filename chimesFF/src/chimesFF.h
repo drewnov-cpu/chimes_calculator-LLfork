@@ -244,6 +244,7 @@ private:
 
     vector<int>                      ncoeffs_3b;          // [ntrips]
     vector<vector<vector<int> > >    chimes_3b_powers;    // [ntrips][nparams][constit. pair]
+    std::vector<std::vector<int>> chimes_3b_powers_flat;  // [ntrips][nparams*npairs]
     vector<vector<double> >          chimes_3b_params;    // [ntrips][nparams]    
     vector<vector<vector<double> > > chimes_3b_cutoff;    // [ntrips][2][constit. pair] inner and outer cutoff for pair 1
 

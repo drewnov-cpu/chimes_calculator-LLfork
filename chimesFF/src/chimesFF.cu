@@ -928,7 +928,19 @@ void chimesFF::read_parameters(string paramfile)
                     if (rank == 0)
                         cout << "chimesFF: " << "\t" << i << " " << chimes_3b_cutoff[i][0][0] << " " << chimes_3b_cutoff[i][0][1] << " " << chimes_3b_cutoff[i][0][2] << endl;
             }            
-        }    
+        }
+        // With all of the 3 body stuff safely done at this point, we want to flatten
+        // chimes_3b_powers by one dimension to make it friendly to the GPU.
+        chimes_3b_powers_flat.resize(chimes_3b_powers.size());
+        for (int i = 0; i < chimes_3b_powers.size(); i++) {
+            for (int j = 0; j < chimes_3b_powers[i].size(); j++) {
+                for (int k = 0; k < chimes_3b_powers[i][j].size(); k++) {
+                    chimes_3b_powers_flat[i].push_back(chimes_3b_powers[i][j][k]); // should this be j or i?
+                }
+            }
+        }
+        
+          
     }
     
     // Rewind and read the 4-body Chebyshev pair parameters
@@ -1657,7 +1669,7 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     // fixed-length C arrays are allocated on the stack.
     double fcut[npairs] ;
     double fcutderiv[npairs] ;
-    double deriv[npairs];
+    //double deriv[npairs];
 
     
 
@@ -1715,8 +1727,8 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     fcut_2[2] = fcut[0] * fcut[1] / dx[2] ;
 
     // Start the force/stress/energy calculation
-    double coeff;
-    int powers[npairs] ;
+    //double coeff;
+    //int powers[npairs] ;
     double force_scalar[npairs] ;
 
     // GPU IMPLEMENTATION
@@ -1748,9 +1760,9 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     // at the end.
 
     // host pointers to update stress and force at the end.
-    double *host_stress, *host_force;
+    // double *host_stress, *host_force;
     // device/GPU pointers for the items being transferred over.
-    poly_pointers_3b *device_polys; // I think the whole struct now has to
+    //poly_pointers_3b *device_polys; // I think the whole struct now has to
     // be copied over to memory, increasing memory accesses?
     // Maybe more arguments is the answer?
     // If I do it this way, I pass a pointer to a struct.
@@ -1764,11 +1776,11 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     // cudaMalloc and free calls are very expensive.
 
     double *device_chimes_params, *device_force, *device_stress;
-    // int *device_chimes_pows - need this but would like it to be flattened
+    int *device_chimes_pows; // need this but would like it to be flattened
     // before the compute call if possible.
     
-    device_polys = (poly_pointers_3b *)malloc(sizeof(poly_pointers_3b));
-
+    //device_polys = (poly_pointers_3b *)malloc(sizeof(poly_pointers_3b));
+    struct poly_pointers_3b device_polys;
     // Allocate GPU memory for device pointers, including the ones in device_polys.
     // Ouch this is a lot of malloc calls.
     // Could put all of these in a struct and then copy the struct to the gpu instead
@@ -1781,15 +1793,16 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     cudaMalloc(&device_chimes_params, chimes_3b_params[tripidx].size() * sizeof(double));
     cudaMalloc(&device_force, force.size() * sizeof(double));
     cudaMalloc(&device_stress, stress.size() * sizeof(double));
+    cudaMalloc(&device_chimes_pows, chimes_3b_powers_flat[tripidx].size() * sizeof(double));
     // mallocs all done except for powers, which I want to flatten first.
 
     // Tn and Tnd mallocs
-    cudaMalloc(&device_polys->Tn_ij, Tn_ij.size() * sizeof(double));
-    cudaMalloc(&device_polys->Tn_ik, Tn_ik.size() * sizeof(double));
-    cudaMalloc(&device_polys->Tn_jk, Tn_jk.size() * sizeof(double));
-    cudaMalloc(&device_polys->Tnd_ij, Tnd_ij.size() * sizeof(double));
-    cudaMalloc(&device_polys->Tnd_ik, Tnd_ik.size() * sizeof(double));
-    cudaMalloc(&device_polys->Tnd_jk, Tnd_jk.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_ij, Tn_ij.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_ik, Tn_ik.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_jk, Tn_jk.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_ij, Tnd_ij.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_ik, Tnd_ik.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_jk, Tnd_jk.size() * sizeof(double));
 
     // Begin transferring memory over to the GPU.
 
@@ -1801,10 +1814,27 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     cudaMemcpyToSymbol(fcutderiv_3b, fcutderiv, npairs * sizeof(double));
     cudaMemcpyToSymbol(fcut2_3b, fcut_2, npairs * sizeof(double));
     cudaMemcpyToSymbol(dr_3b, dr.data(), dr.size() * sizeof(double));
+    cudaMemcpyToSymbol(pair_idx_3b, mapped_pair_idx.data(), mapped_pair_idx.size() * sizeof(double));
     #ifdef USE_DISTANCE_TENSOR
         cudaMemcpyToSymbol(dr2_3b, dr2, sizeof(dr2_3b));
     #endif
     cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double));
+
+    // constant memory stuff is completed, time for dynamically allocated stuff
+
+    cudaMemcpy(device_chimes_params, chimes_3b_params[tripidx].data(), chimes_3b_params.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_force, force.data(), force.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_stress, stress.data(), stress.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_chimes_pows, chimes_3b_powers_flat[tripidx].data(), chimes_3b_powers_flat[tripidx].size() * sizeof(int), cudaMemcpyHostToDevice);
+
+    //memcpy for the Tn and Tnds
+    cudaMemcpy(device_polys.Tn_ij, Tn_ij.data(), Tn_ij.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_ik, Tn_ik.data(), Tn_ik.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_jk, Tn_jk.data(), Tn_jk.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_ij, Tnd_ij.data(), Tnd_ij.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_ik, Tnd_ik.data(), Tnd_ik.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_jk, Tnd_jk.data(), Tnd_jk.size() * sizeof(double), cudaMemcpyHostToDevice);
+
 
     // Memory transfer should now be done - time to do the grid and block dimension setup
     int blockSize = 512;
@@ -1813,8 +1843,31 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     dim3 dimGrid(ceil((double)ncoeffs_3b[tripidx]/blockSize), 1 , 1);
 
     // Start the kernel.
+    compute3b_helper<<<dimGrid, dimBlock>>>(ncoeffs_3b[tripidx], fcut_all, device_chimes_params, device_chimes_pows, device_force, device_stress, device_polys);
+    cudaDeviceSynchronize();
+
+    // kernel is now finished at this point - time to get the results we
+    // need from the GPU.
+
+    cudaMemcpyFromSymbol(&energy, gpu_energy, sizeof(double));
+    cudaMemcpy(stress.data(), device_stress, stress.size() * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(force.data(), device_force, force.size() * sizeof(double), cudaMemcpyDeviceToHost);
+    // testing this.
+
+    // memory clean up
+    cudaFree(device_chimes_params);
+    cudaFree(device_chimes_pows);
+    cudaFree(device_force);
+    cudaFree(device_stress);
+    cudaFree(device_polys.Tn_ij);
+    cudaFree(device_polys.Tn_ik);
+    cudaFree(device_polys.Tn_jk);
+    cudaFree(device_polys.Tnd_ij);
+    cudaFree(device_polys.Tnd_ik);
+    cudaFree(device_polys.Tnd_jk);
+    //free(device_polys);
     
-    
+    /*
     for(int coeffs=0; coeffs<ncoeffs_3b[tripidx]; coeffs++)
     {
         coeff = chimes_3b_params[tripidx][coeffs];
@@ -1822,6 +1875,9 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
         powers[0] = chimes_3b_powers[tripidx][coeffs][mapped_pair_idx[0]];
         powers[1] = chimes_3b_powers[tripidx][coeffs][mapped_pair_idx[1]];
         powers[2] = chimes_3b_powers[tripidx][coeffs][mapped_pair_idx[2]];
+
+        // For powers - the mapped pair will always be a size of 3,
+        // so I can flatten by that dimension and then index in with coeffs * 3 + mapped_pair_index
 
         //GPU implementation notes - since this is small and all of the accesses are constant,
         //I think I can create a per thread array and the compiler will put them on registers
@@ -1923,11 +1979,17 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
         stress[4] -= force_scalar[2]  * dr[2*CHDIM+1] * dr[2*CHDIM+2]; // yz tensor component
         stress[5] -= force_scalar[2]  * dr[2*CHDIM+2] * dr[2*CHDIM+2]; // zz tensor component
 #endif        
-    }
+    } */
 
-    force_scalar_in[0] = force_scalar[0];
-    force_scalar_in[1] = force_scalar[1];
-    force_scalar_in[2] = force_scalar[2];
+    //force_scalar_in[0] = force_scalar[0];
+    //force_scalar_in[1] = force_scalar[1];
+    //force_scalar_in[2] = force_scalar[2];
+
+    force_scalar_in[0] = 1;
+    force_scalar_in[1] = 1;
+    force_scalar_in[2] = 1;
+
+    // what actually is the physical meaning behind returning the last force scalars to force scalar in?
 
     return;    
 }
