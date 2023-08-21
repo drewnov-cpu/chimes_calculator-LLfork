@@ -48,6 +48,8 @@ int main(int argc, char* argv[]) {
     chimesFF chimes;
     chimes.init(0); //MPI rank of zero
     chimes.read_parameters(param_file);
+    chimes.build_pair_int_trip_map(); 
+    chimes.build_pair_int_quad_map();
 
     // time to do some file reading for the cord file
     // depression.
@@ -124,6 +126,10 @@ int main(int argc, char* argv[]) {
 
     std::vector<double> r_ij(3, 0.0); //x,y,z distance
     double dist_ij; //distance between two atoms.
+    std::vector<double> r_ik(3, 0.0); //x,y,z distance
+    double dist_ik; //distance between two atoms.
+    std::vector<double> r_jk(3, 0.0); //x,y,z distance
+    double dist_jk; //distance between two atoms.
     std::vector<int> typ_idxs{0, 0}; //type indexes to be passed to compute calls
     std::vector<int> all_typ_idxs; //type indexes for each atom.
 
@@ -160,7 +166,7 @@ int main(int argc, char* argv[]) {
             // std::vector<double> flat_force(std::begin(forces[i]), std::end(forces[i]));
             // flat_force.insert(std::end(flat_force), std::begin(forces[j]), std::end(forces[j]));
             
-            std::vector<double > flat_force(6,0);
+            std::vector<double> flat_force(6,0);
             
             //forces need to be flattened together to 
             //need to flatten the forces we want together.
@@ -178,6 +184,47 @@ int main(int argc, char* argv[]) {
             }
 
             //add three and four body interactions after this later.
+
+            if (order_3b > 0) {
+                
+                for (int k = j + 1; k < natoms; k++) {
+                    dist_ik = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, i, k, r_ik);
+                    dist_jk = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, j, k, r_jk);
+
+                    if (dist_ik >= maxcut)
+                        continue;
+                    if (dist_jk >= maxcut)
+                        continue;
+
+                    typ_idxs.push_back(all_typ_idxs[k]);
+
+                    // 3 body setup, some vectors needed to be created/modified to fit
+                    std::vector<double> dx;
+                    dx.push_back(dist_ij);
+                    dx.push_back(dist_ik);
+                    dx.push_back(dist_jk);  // distance magnitudes
+
+                    //distance vectors_combined
+                    std::vector<double> r;
+                    r.insert(r.end(), r_ij.begin(), r_ij.end());
+                    r.insert(r.end(), r_ik.begin(), r_ik.end());
+                    r.insert(r.end(), r_jk.begin(), r_jk.end());
+
+                    std::vector<double> flat_force(9,0);
+
+                    chimes.compute_3B(dx, r, typ_idxs, flat_force, stress, energy, tmp_3b);
+
+                    //update forces after the call to three_b has been created.
+                    for (int l = 0; l < 3; l++) {
+                        forces[i][l] += flat_force[l];
+                        forces[j][l] += flat_force[3 + l];
+                        forces[k][l] += flat_force[6 + l];
+                    }
+
+                    // Should now support three body interactions.
+
+                }
+            }
         }
     }
     //print the results to a separate file
