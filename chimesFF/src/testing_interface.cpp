@@ -150,6 +150,7 @@ int main(int argc, char* argv[]) {
     chimes4BTmp tmp_4b(order_4b);
 
     for (int i = 0; i < natoms; i++) {
+        chimes.compute_1B(all_typ_idxs[i], energy);
         for (int j = i + 1; j < natoms; j++) {
             dist_ij = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, i, j, r_ij);
 
