@@ -1807,7 +1807,12 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     // Begin transferring memory over to the GPU.
 
     // Start off with the stuff going over to constant memory.
-    cudaMemcpyToSymbol(fcut_3b, fcut, npairs * sizeof(double));
+    if (cudaMemcpyToSymbol(fcut_3b, fcut, npairs * sizeof(double)) != cudaSuccess) {
+        std::cout << "An error occured at line 1810";
+        exit(1);
+    }
+
+    
     // These arrays should just decay to a pointer, which should make this
     // acceptable I think.  But make sure to print these out in testing
     // to make sure the data is actually being transferred.
@@ -1984,6 +1989,12 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     //force_scalar_in[0] = force_scalar[0];
     //force_scalar_in[1] = force_scalar[1];
     //force_scalar_in[2] = force_scalar[2];
+
+    // the last iteration needs to be removed from
+    // the gpu so force scalars can be returned.
+    // unclear from meeting with professor if this 
+    // actually works correctly or if anyone is using this,
+    // so may end up getting removed.
 
     force_scalar_in[0] = 1;
     force_scalar_in[1] = 1;
