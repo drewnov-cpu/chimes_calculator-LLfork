@@ -99,11 +99,9 @@ double *chimes_params, int *chimes_pows, double *force, double *stress, poly_poi
         powers[1] = chimes_pows[coeffs * 3 + pair_idx_3b[1]];
         powers[2] = chimes_pows[coeffs * 3 + pair_idx_3b[2]];
 
-        if (coeffs == 0) {
-            printf("Powers: %i %i %i\n", powers[0], powers[1], powers[2]);
-        }
+        double energy_result = coeff_val * fcut_all * cheby.Tn_ij[powers[0]] * cheby.Tn_ik[powers[1]] * cheby.Tn_jk[powers[2]];
 
-        atomicAdd(&gpu_energy, coeff_val * fcut_all * cheby.Tn_ij[powers[0]] * cheby.Tn_ik[powers[1]] * cheby.Tn_jk[powers[2]]);
+        atomicAdd(&gpu_energy, energy_result);
 
         double deriv[3];
         deriv[0] = fcut_3b[0] * cheby.Tnd_ij[powers[0]] + fcutderiv_3b[0] * cheby.Tn_ij[powers[0]];

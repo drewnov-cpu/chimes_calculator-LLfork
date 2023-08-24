@@ -1808,26 +1808,52 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
 
     // Start off with the stuff going over to constant memory.
     if (cudaMemcpyToSymbol(fcut_3b, fcut, npairs * sizeof(double)) != cudaSuccess) {
-        std::cout << "An error occured at line 1810";
+        std::cout << "An error occured at line 1810" << std::endl;
         exit(1);
     }
 
+    if (cudaMemcpyToSymbol(fcutderiv_3b, fcutderiv, npairs * sizeof(double)) != cudaSuccess) {
+        std::cout << "An error occured at line 1815" << std::endl;
+        exit(1);
+    }
+
+    if (cudaMemcpyToSymbol(fcut2_3b, fcut_2, npairs * sizeof(double)) != cudaSuccess) {
+        std::cout << "An error occured at line 1820" << std::endl;
+        exit(1);
+    }
     
+    if (cudaMemcpyToSymbol(dr_3b, dr.data(), dr.size() * sizeof(double)) != cudaSuccess) {
+        std::cout << "An error occured at line 1825" << std::endl;
+        exit(1);
+    }
+
+    if (cudaMemcpyToSymbol(pair_idx_3b, mapped_pair_idx.data(), mapped_pair_idx.size() * sizeof(int)) != cudaSuccess) {
+        std::cout << "An error occured at line 1830" << std::endl;
+        exit(1);
+    }
     // These arrays should just decay to a pointer, which should make this
     // acceptable I think.  But make sure to print these out in testing
     // to make sure the data is actually being transferred.
-    cudaMemcpyToSymbol(fcutderiv_3b, fcutderiv, npairs * sizeof(double));
-    cudaMemcpyToSymbol(fcut2_3b, fcut_2, npairs * sizeof(double));
-    cudaMemcpyToSymbol(dr_3b, dr.data(), dr.size() * sizeof(double));
-    cudaMemcpyToSymbol(pair_idx_3b, mapped_pair_idx.data(), mapped_pair_idx.size() * sizeof(double));
+    
+    
+    
+    
     #ifdef USE_DISTANCE_TENSOR
-        cudaMemcpyToSymbol(dr2_3b, dr2, sizeof(dr2_3b));
+        if (cudaMemcpyToSymbol(dr2_3b, dr2, sizeof(dr2_3b)) != cudaSuccess) {
+            std::cout << "An error occured at line 1842" << std::endl;
+            exit(1);
+        }
+        
     #endif
-    cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double));
+    if (cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double)) != cudaSuccess) {
+        std::cout << "An error occured at line 1848" << std::endl;
+        exit(1);
+    }
+    
 
     // constant memory stuff is completed, time for dynamically allocated stuff
 
-    cudaMemcpy(device_chimes_params, chimes_3b_params[tripidx].data(), chimes_3b_params.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_chimes_params, chimes_3b_params[tripidx].data(), chimes_3b_params[tripidx].size() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(device_force, force.data(), force.size() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(device_stress, stress.data(), stress.size() * sizeof(double), cudaMemcpyHostToDevice);
     cudaMemcpy(device_chimes_pows, chimes_3b_powers_flat[tripidx].data(), chimes_3b_powers_flat[tripidx].size() * sizeof(int), cudaMemcpyHostToDevice);
