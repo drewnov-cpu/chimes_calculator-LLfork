@@ -1,0 +1,78 @@
+for the parts I am supposed to parallelize, how many threads do I need?
+Is it faster to fire up as many threads as possible, or to have some threads take care of multiple pieces of data?
+
+water paper: https://pubs.acs.org/doi/10.1021/acs.jctc.8b00831#
+
+tersoff = smooth step function - similar to sigmoid function
+
+What needs to be moved over to GPU for calculations
+
+starting with 2B, will figure out if other stuff needs to move for higher order bodies
+
+ncoeffs_2b[pair_idx] should be passed as part of the helper computational method
+chimes_2b_params[pair_idx] will need to be send to the GPU - This should be linear/batchable at least
+fcut will need to be passed as part of the helper method
+chimes_2b_pows[pair_idx] will need to be sent to the GPU memory - this is linear/batchable
+fcut_deriv will need to be passed as part the helper method
+Tn and Tnd will both need to be sent to GPU memory - these are not linear/batchable, TODO calculate how large they could get.
+Also of note, this only gets worse when we increase the bodiedness of the interations we are looking at - for 3b and 4b, there are 3
+and 6 of each of these respectively.  Ouch - although based on the example polynomial orders this should be fine, but need to ask
+what a max polynomial order might look like - surely it can't be that large right?
+
+dx_inv will need to be passed as part of the helper method
+force scalar has to be calculated on the GPU
+dr needs to be on the gpu - this needs to be sent to GPU memory, but every thread needs to access it multiple times - a shared
+memory scheme may be useful.  Actually it should be constant across the threads right? So I can send it to symbol/constant memory/whatever its called.
+resulting force vector needs to be created on the GPU and then copied back to the cpu to update the force vector that is passed in
+to the intial method
+same with stress vector - these are constant size and shouldn't present an issue.
+I can start with these as atomic operations into global GPU memory, since thats probably the easiest way to do it, but may be worth
+thinking about faster options, like starting off with it in shared memory and then adding the shared memory vectors to the global one
+with atomic operations
+NEED UNIT TESTS PLUS BENCHMARKS (the full run tests may be acceptable as benchmarks)
+float versus double - float may be significantly faster depending on the gpu, but given the scale of the calculations 
+double precision may be necessary.
+
+UNIT TEST brainstorming - may be helpful to talk with Professor Lindsey about this since she should have a better idea of the edge cases
+Just start with compute2b, the others should follow a similar principle.
+2 of the same atom
+2 different atoms
+Do the types of atoms matter? e.g. is C and H good enough for a unit test, or should they test all the combinations of CHON that the group is likely to use?  This may become extensive with larger numbers of bodiedness.
+Stress and energy.
+Can I break it down smaller than that if necessary? Ordering by coeff output may be difficult on the gpu, although there is a way to enforce execution order, but Im not sure if that applies to the whole GPU, from memory its just a single block.
+
+Look at HN3 parameter file for realistic benchmarking.
+
+Look at unpublished models for some really big ones.
+
+
+liqC_2b for short parameter file, can then use with the liqC xyz file
+
+create c++ equivalent of python example main.py in examples for unit testing
+
+start with two body and then roll on from there.
+
+
+install on great lakes and test python script for change in get 
+distance function.
+
+./testing_interface force_fields/published_params.liqC.2b.cubic.txt configurations/liqC.2.5gcc_6000K.OUTCAR_#000.xyz
+
+nvcc chimesFF.cu gpu_compute.cu testing_interface.cpp -O3 -arch=sm_70 -rdc=true
+
+
+
+Editing paramter files notes
+set pairtypes on top to 2, not zero. At the top
+Then edit all two body members and get rid of everything but the first two.  Set them to zero.
+Note that parameter files are very space senstive when taking input.
+If we want three body, delete everything related to 4 body.
+If we want two body, delete everything related to 3 and 4 body.
+For four body, it will accept zero 3 body interactions and still run.
+set triplets/quadruplets to zero.
+
+
+The energy portion of the HN3 test is not passing on the gpu version... possibly because it doesnt take in an updated energy to the device variable?
+
+For the three body force scalar - preserve current functionality for now by pulling the last coeff out of the GPU and returning whatever is made by that.
+
