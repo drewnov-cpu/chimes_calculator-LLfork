@@ -15,6 +15,17 @@ __constant__ int pair_idx_3b[3];
     __constant__ double dr2_3b[CHDIM*CHDIM*3*3];
 #endif
 
+// 4 body
+__constant__ double fcut_4b[6];
+__constant__ double fcutderiv_4b[6];
+#ifdef USE_DISTANCE_TENSOR  
+    __constant__ double dr2_4b[CHDIM*CHDIM*6*6]; // npairs = 6
+#endif
+__constant__ double fcut5_4b[6];
+__constant__ double dr_4b[6];
+__constant__ int pair_idx_4b[6];
+
+
 
 __device__ double gpu_energy = 0;
 // make sure to set this right before call to compute methods if that is allowed.
@@ -174,6 +185,167 @@ double *chimes_params, int *chimes_pows, double *force, double *stress, poly_poi
         atomicAdd(&(stress[4]), - force_scalar[2] * get_dr2(2,1,2,2));
         atomicAdd(&(stress[5]), - force_scalar[2] * get_dr2(2,2,2,2));
 
+        #endif
+
+    }
+
+    #undef get_dr2
+}
+
+
+__global__ void compute4b_helper(int ncoeffs, double fcut_all,
+double *chimes_params, int *chimes_pows, double *force, double *stress, poly_pointers_4b cheby) {
+    #define get_dr2(i, j, k, l) dr2_4b[i*CHDIM*6*CHDIM + j*6*CHDIM + k*CHDIM + l]
+
+    int tx = threadIdx.x;
+    int bx = blockIdx.x;
+    int coeffs = bx * blockDim.x + tx;
+
+    if (coeffs < ncoeffs) {
+
+        double coeff = chimes_params[coeffs];
+
+        int powers[6]; // npairs
+
+        for (int i = 0; i < 6; i++)
+            powers[i] = chimes_pows[coeffs * 6 + pair_idx_4b[i]];
+
+        double Tn_ij_ik_il = cheby.Tn_ij[powers[0]] * cheby.Tn_ik[powers[1]] * cheby.Tn_il[powers[2]];
+        double Tn_jk_jl = cheby.Tn_jk[powers[3]] * cheby.Tn_jl[powers[4]];
+        double Tn_kl_5 = cheby.Tn_kl[powers[5]];
+
+        double energy_result = coeff * fcut_all * Tn_ij_ik_il * Tn_jk_jl * Tn_kl_5;
+        atomicAdd(&gpu_energy, energy_result);
+
+        double deriv[6]; // npairs
+
+        deriv[0] = fcut_4b[0] * cheby.Tnd_ij[powers[0]] + fcutderiv_4b[0] * cheby.Tn_ij[powers[0]];
+        deriv[1] = fcut_4b[1] * cheby.Tnd_ik[powers[1]] + fcutderiv_4b[1] * cheby.Tn_ik[powers[1]];
+        deriv[2] = fcut_4b[2] * cheby.Tnd_il[powers[2]] + fcutderiv_4b[2] * cheby.Tn_il[powers[2]];
+        deriv[3] = fcut_4b[3] * cheby.Tnd_jk[powers[3]] + fcutderiv_4b[3] * cheby.Tn_jk[powers[3]];
+        deriv[4] = fcut_4b[4] * cheby.Tnd_jl[powers[4]] + fcutderiv_4b[4] * cheby.Tn_jl[powers[4]];
+        deriv[5] = fcut_4b[5] * cheby.Tnd_kl[powers[5]] + fcutderiv_4b[5] * cheby.Tn_kl[powers[5]];
+
+        double force_scalar[6];
+
+        force_scalar[0]  = coeff * deriv[0] * fcut5_4b[0] * cheby.Tn_ik[powers[1]] * cheby.Tn_il[powers[2]] * Tn_jk_jl * Tn_kl_5;
+        force_scalar[1]  = coeff * deriv[1] * fcut5_4b[1] * cheby.Tn_ij[powers[0]] * cheby.Tn_il[powers[2]] * Tn_jk_jl * Tn_kl_5;
+        force_scalar[2]  = coeff * deriv[2] * fcut5_4b[2] * cheby.Tn_ij[powers[0]] * cheby.Tn_ik[powers[1]] * Tn_jk_jl * Tn_kl_5;
+        force_scalar[3]  = coeff * deriv[3] * fcut5_4b[3] * Tn_ij_ik_il * cheby.Tn_jl[powers[4]] * Tn_kl_5;
+        force_scalar[4]  = coeff * deriv[4] * fcut5_4b[4] * Tn_ij_ik_il * cheby.Tn_jk[powers[3]] * Tn_kl_5;
+        force_scalar[5]  = coeff * deriv[5] * fcut5_4b[5] * Tn_ij_ik_il * Tn_jk_jl;
+
+        // Accumulate forces/stresses on/from the ij pair
+        
+        atomicAdd(&(force[0*CHDIM+0]), force_scalar[0] * dr_4b[0*CHDIM+0]);
+        atomicAdd(&(force[0*CHDIM+1]), force_scalar[0] * dr_4b[0*CHDIM+1]);
+        atomicAdd(&(force[0*CHDIM+2]), force_scalar[0] * dr_4b[0*CHDIM+2]);
+
+        atomicAdd(&(force[1*CHDIM+0]), - force_scalar[0] * dr_4b[0*CHDIM+0]);
+        atomicAdd(&(force[1*CHDIM+1]), - force_scalar[0] * dr_4b[0*CHDIM+1]);
+        atomicAdd(&(force[1*CHDIM+2]), - force_scalar[0] * dr_4b[0*CHDIM+2]);
+
+        #ifdef USE_DISTANCE_TENSOR
+            atomicAdd(&(stress[0]), - force_scalar[0] * get_dr2(0,0,0,0));
+            atomicAdd(&(stress[1]), - force_scalar[0] * get_dr2(0,0,0,1));
+            atomicAdd(&(stress[2]), - force_scalar[0] * get_dr2(0,0,0,2));
+            atomicAdd(&(stress[3]), - force_scalar[0] * get_dr2(0,1,0,1));
+            atomicAdd(&(stress[4]), - force_scalar[0] * get_dr2(0,1,0,2));
+            atomicAdd(&(stress[5]), - force_scalar[0] * get_dr2(0,2,0,2));
+        #endif
+
+        // Accumulate forces/stresses on/from the ik pair
+
+        atomicAdd(&(force[0*CHDIM+0]), force_scalar[1] * dr_4b[1*CHDIM+0]);
+        atomicAdd(&(force[0*CHDIM+1]), force_scalar[1] * dr_4b[1*CHDIM+1]);
+        atomicAdd(&(force[0*CHDIM+2]), force_scalar[1] * dr_4b[1*CHDIM+2]);
+
+        atomicAdd(&(force[2*CHDIM+0]), - force_scalar[1] * dr_4b[1*CHDIM+0]);
+        atomicAdd(&(force[2*CHDIM+1]), - force_scalar[1] * dr_4b[1*CHDIM+1]);
+        atomicAdd(&(force[2*CHDIM+2]), - force_scalar[1] * dr_4b[1*CHDIM+2]);
+
+        #ifdef USE_DISTANCE_TENSOR
+            atomicAdd(&(stress[0]), - force_scalar[1] * get_dr2(1,0,1,0));
+            atomicAdd(&(stress[1]), - force_scalar[1] * get_dr2(1,0,1,1));
+            atomicAdd(&(stress[2]), - force_scalar[1] * get_dr2(1,0,1,2));
+            atomicAdd(&(stress[3]), - force_scalar[1] * get_dr2(1,1,1,1));
+            atomicAdd(&(stress[4]), - force_scalar[1] * get_dr2(1,1,1,2));
+            atomicAdd(&(stress[5]), - force_scalar[1] * get_dr2(1,2,1,2));
+        #endif
+
+        // Accumulate forces/stresses on/from the il pair
+
+        atomicAdd(&(force[0*CHDIM+0]), force_scalar[2] * dr_4b[2*CHDIM+0]);
+        atomicAdd(&(force[0*CHDIM+1]), force_scalar[2] * dr_4b[2*CHDIM+1]);
+        atomicAdd(&(force[0*CHDIM+2]), force_scalar[2] * dr_4b[2*CHDIM+2]);
+
+        atomicAdd(&(force[3*CHDIM+0]), - force_scalar[2] * dr_4b[2*CHDIM+0]);
+        atomicAdd(&(force[3*CHDIM+1]), - force_scalar[2] * dr_4b[2*CHDIM+1]);
+        atomicAdd(&(force[3*CHDIM+2]), - force_scalar[2] * dr_4b[2*CHDIM+2]);
+
+        #ifdef USE_DISTANCE_TENSOR
+            atomicAdd(&(stress[0]), - force_scalar[2]  * get_dr2(2,0,2,0));
+            atomicAdd(&(stress[1]), - force_scalar[2]  * get_dr2(2,0,2,1));
+            atomicAdd(&(stress[2]), - force_scalar[2]  * get_dr2(2,0,2,2));
+            atomicAdd(&(stress[3]), - force_scalar[2]  * get_dr2(2,1,2,1));
+            atomicAdd(&(stress[4]), - force_scalar[2]  * get_dr2(2,1,2,2));
+            atomicAdd(&(stress[5]), - force_scalar[2]  * get_dr2(2,2,2,2));
+        #endif
+
+        // Accumulate forces/stresses on/from the jk pair
+
+        atomicAdd(&(force[1*CHDIM+0]), force_scalar[3] * dr_4b[3*CHDIM+0]);
+        atomicAdd(&(force[1*CHDIM+1]), force_scalar[3] * dr_4b[3*CHDIM+1]);
+        atomicAdd(&(force[1*CHDIM+2]), force_scalar[3] * dr_4b[3*CHDIM+2]);
+
+        atomicAdd(&(force[2*CHDIM+0]), - force_scalar[3] * dr_4b[3*CHDIM+0]);
+        atomicAdd(&(force[2*CHDIM+1]), - force_scalar[3] * dr_4b[3*CHDIM+1]);
+        atomicAdd(&(force[2*CHDIM+2]), - force_scalar[3] * dr_4b[3*CHDIM+2]);
+
+
+        #ifdef USE_DISTANCE_TENSOR
+            atomicAdd(&(stress[0]), - force_scalar[3]  * get_dr2(3,0,3,0));
+            atomicAdd(&(stress[1]), - force_scalar[3]  * get_dr2(3,0,3,1));
+            atomicAdd(&(stress[2]), - force_scalar[3]  * get_dr2(3,0,3,2));
+            atomicAdd(&(stress[3]), - force_scalar[3]  * get_dr2(3,1,3,1));
+            atomicAdd(&(stress[4]), - force_scalar[3]  * get_dr2(3,1,3,2));
+            atomicAdd(&(stress[5]), - force_scalar[3]  * get_dr2(3,2,3,2));
+        #endif
+        // Accumulate forces/stresses on/from the jl pair
+
+        atomicAdd(&(force[1*CHDIM+0]), force_scalar[4] * dr_4b[4*CHDIM+0]);
+        atomicAdd(&(force[1*CHDIM+1]), force_scalar[4] * dr_4b[4*CHDIM+1]);
+        atomicAdd(&(force[1*CHDIM+2]), force_scalar[4] * dr_4b[4*CHDIM+2]);
+
+        atomicAdd(&(force[3*CHDIM+0]), - force_scalar[4] * dr_4b[4*CHDIM+0]);
+        atomicAdd(&(force[3*CHDIM+1]), - force_scalar[4] * dr_4b[4*CHDIM+1]);
+        atomicAdd(&(force[3*CHDIM+2]), - force_scalar[4] * dr_4b[4*CHDIM+2]);
+
+        #ifdef USE_DISTANCE_TENSOR
+            atomicAdd(&(stress[0]), - force_scalar[4]  * get_dr2(4,0,4,0));
+            atomicAdd(&(stress[1]), - force_scalar[4]  * get_dr2(4,0,4,1));
+            atomicAdd(&(stress[2]), - force_scalar[4]  * get_dr2(4,0,4,2));
+            atomicAdd(&(stress[3]), - force_scalar[4]  * get_dr2(4,1,4,1));
+            atomicAdd(&(stress[4]), - force_scalar[4]  * get_dr2(4,1,4,2));
+            atomicAdd(&(stress[5]), - force_scalar[4]  * get_dr2(4,2,4,2));
+        #endif
+        // Accumulate forces/stresses on/from the kl pair
+
+        atomicAdd(&(force[2*CHDIM+0]), force_scalar[5] * dr_4b[5*CHDIM+0]);
+        atomicAdd(&(force[2*CHDIM+1]), force_scalar[5] * dr_4b[5*CHDIM+1]);
+        atomicAdd(&(force[2*CHDIM+2]), force_scalar[5] * dr_4b[5*CHDIM+2]);
+
+        atomicAdd(&(force[3*CHDIM+0]), - force_scalar[5] * dr_4b[5*CHDIM+0]);
+        atomicAdd(&(force[3*CHDIM+1]), - force_scalar[5] * dr_4b[5*CHDIM+1]);
+        atomicAdd(&(force[3*CHDIM+2]), - force_scalar[5] * dr_4b[5*CHDIM+2]);
+
+        #ifdef USE_DISTANCE_TENSOR
+            atomicAdd(&(stress[0]), - force_scalar[5]  * get_dr2(5,0,5,0));
+            atomicAdd(&(stress[1]), - force_scalar[5]  * get_dr2(5,0,5,1));
+            atomicAdd(&(stress[2]), - force_scalar[5]  * get_dr2(5,0,5,2));
+            atomicAdd(&(stress[3]), - force_scalar[5]  * get_dr2(5,1,5,1));
+            atomicAdd(&(stress[4]), - force_scalar[5]  * get_dr2(5,1,5,2));
+            atomicAdd(&(stress[5]), - force_scalar[5]  * get_dr2(5,2,5,2));
         #endif
 
     }

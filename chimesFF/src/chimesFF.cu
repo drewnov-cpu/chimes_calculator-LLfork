@@ -1337,6 +1337,16 @@ void chimesFF::read_parameters(string paramfile)
                         << chimes_4b_cutoff[i][1][5] << endl;
                 }                
             }            
+        }
+
+        //set up flat version of powers for 4 body.
+        chimes_4b_powers_flat.resize(chimes_4b_powers.size());
+        for (int i = 0; i < chimes_4b_powers.size(); i++) {
+            for (int j = 0; j < chimes_4b_powers[i].size(); j++) {
+                for (int k = 0; k < chimes_4b_powers[i][j].size(); k++) {
+                    chimes_4b_powers_flat[i].push_back(chimes_4b_powers[i][j][k]);
+                }
+            }
         }    
     }
     
@@ -1729,7 +1739,7 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
     // Start the force/stress/energy calculation
     //double coeff;
     //int powers[npairs] ;
-    double force_scalar[npairs] ;
+    //double force_scalar[npairs] ;
 
     // GPU IMPLEMENTATION
 
@@ -2038,7 +2048,7 @@ void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, 
 }
 void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, const vector<int> & typ_idxs, vector<double> & force, vector<double> & stress, double & energy, chimes4BTmp &tmp, vector<double> & force_scalar_in)
 {
-    // Compute 3b (input: 3 atoms or distances, corresponding types... outputs (updates) force, acceleration, energy, stress
+    // Compute 4b (input: 4 atoms or distances, corresponding types... outputs (updates) force, acceleration, energy, stress
     //
     // Input parameters:
     //
@@ -2059,7 +2069,7 @@ void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, 
 
     double fcut[npairs] ;
     double fcutderiv[npairs] ;
-    double deriv[npairs] ;
+    //double deriv[npairs] ;
     
 
 #if DEBUG == 1  
@@ -2136,10 +2146,114 @@ void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, 
     
     // Start the force/stress/energy calculation
         
-    double coeff;
-    int powers[npairs] ;
-    double force_scalar[npairs] ;
+    //double coeff;
+    //int powers[npairs] ;
+    //double force_scalar[npairs] ;
 
+    // Begin setting up the pointers for the GPU.
+
+    double *device_chimes_params, *device_force, *device_stress;
+    int *device_chimes_pows;
+
+    struct poly_pointers_4b device_polys;
+
+    // Various malloc calls
+    cudaMalloc(&device_chimes_params, chimes_4b_params[quadidx].size() * sizeof(double));
+    cudaMalloc(&device_force, force.size() * sizeof(double));
+    cudaMalloc(&device_stress, stress.size() * sizeof(double));
+    cudaMalloc(&device_chimes_pows, chimes_4b_powers_flat[quadidx].size() * sizeof(double));
+
+    // Tn and Tnd mallocs
+    cudaMalloc(&device_polys.Tn_ij, Tn_ij.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_ik, Tn_ik.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_il, Tn_il.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_jk, Tn_jk.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_jl, Tn_jl.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tn_kl, Tn_kl.size() * sizeof(double));
+
+    cudaMalloc(&device_polys.Tnd_ij, Tnd_ij.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_ik, Tnd_ik.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_il, Tnd_il.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_jk, Tnd_jk.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_jl, Tnd_jl.size() * sizeof(double));
+    cudaMalloc(&device_polys.Tnd_kl, Tnd_kl.size() * sizeof(double));
+
+    // All of the mallocs should be done, can begin transferring memory
+    // over to the gpu
+
+    // Let's start off with constant memory first because
+    // I just like it better for some reason.
+
+    cudaMemcpyToSymbol(fcut_4b, fcut, npairs * sizeof(double));
+    cudaMemcpyToSymbol(fcutderiv_4b, fcutderiv, npairs * sizeof(double));
+    cudaMemcpyToSymbol(fcut5_4b, fcut_5, npairs * sizeof(double));
+    cudaMemcpyToSymbol(dr_4b, dr.data(), dr.size() * sizeof(double));
+    cudaMemcpyToSymbol(pair_idx_4b, mapped_pair_idx.data(), mapped_pair_idx.size() * sizeof(int));
+
+    #ifdef USE_DISTANCE_TENSOR
+        cudaMemcpyToSymbol(dr2_4b, dr2, sizeof(dr2_4b));
+    #endif
+
+    cudaMemcpyToSymbol(gpu_energy, &energy, sizeof(double));
+
+    cudaMemcpy(device_chimes_params, chimes_4b_params[quadidx].data(), chimes_4b_params[quadidx].size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_force, force.data(), force.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_stress, stress.data(), stress.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_chimes_pows, chimes_4b_powers_flat[quadidx].data(), chimes_4b_powers_flat[quadidx].size() * sizeof(int), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(device_polys.Tn_ij, Tn_ij.data(), Tn_ij.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_ik, Tn_ik.data(), Tn_ik.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_il, Tn_il.data(), Tn_il.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_jk, Tn_jk.data(), Tn_jk.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_jl, Tn_jl.data(), Tn_jl.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tn_kl, Tn_kl.data(), Tn_kl.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+    cudaMemcpy(device_polys.Tnd_ij, Tnd_ij.data(), Tnd_ij.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_ik, Tnd_ik.data(), Tnd_ik.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_il, Tnd_il.data(), Tnd_il.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_jk, Tnd_jk.data(), Tnd_jk.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_jl, Tnd_jl.data(), Tnd_jl.size() * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(device_polys.Tnd_kl, Tnd_kl.data(), Tnd_kl.size() * sizeof(double), cudaMemcpyHostToDevice);
+
+    int blockSize = 512;
+    // Can start with this
+    dim3 dimBlock(blockSize, 1, 1);
+    dim3 dimGrid(ceil((double)ncoeffs_4b[quadidx]/blockSize), 1 , 1);
+
+    // Start the kernel
+    compute4b_helper<<<dimGrid, dimBlock>>>(ncoeffs_4b[quadidx], fcut_all, device_chimes_params, device_chimes_pows, device_force, device_stress, device_polys);
+    cudaDeviceSynchronize();
+
+    // retrieve relevant results from the GPU
+
+    cudaMemcpyFromSymbol(&energy, gpu_energy, sizeof(double));
+    cudaMemcpy(stress.data(), device_stress, stress.size() * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(force.data(), device_force, force.size() * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // Clean up time.
+
+    cudaFree(device_chimes_params);
+    cudaFree(device_chimes_pows);
+    cudaFree(device_force);
+    cudaFree(device_stress);
+
+    cudaFree(device_polys.Tn_ij);
+    cudaFree(device_polys.Tn_ik);
+    cudaFree(device_polys.Tn_il);
+    cudaFree(device_polys.Tn_jk);
+    cudaFree(device_polys.Tn_jl);
+    cudaFree(device_polys.Tn_kl);
+
+    cudaFree(device_polys.Tnd_ij);
+    cudaFree(device_polys.Tnd_ik);
+    cudaFree(device_polys.Tnd_il);
+    cudaFree(device_polys.Tnd_jk);
+    cudaFree(device_polys.Tnd_jl);
+    cudaFree(device_polys.Tnd_kl);
+
+    // all clean I think.
+
+    /*
     for(int coeffs=0; coeffs<ncoeffs_4b[quadidx]; coeffs++)
     {
         coeff = chimes_4b_params[quadidx][coeffs];
@@ -2328,7 +2442,15 @@ void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, 
 	force_scalar_in[3] = force_scalar[3];
 	force_scalar_in[4] = force_scalar[4];
 	force_scalar_in[5] = force_scalar[5];
+    */
 
+    force_scalar_in[0] = 1;
+	force_scalar_in[1] = 1;
+	force_scalar_in[2] = 1;
+	force_scalar_in[3] = 1;
+	force_scalar_in[4] = 1;
+	force_scalar_in[5] = 1;
+   
     return;
 }
 
