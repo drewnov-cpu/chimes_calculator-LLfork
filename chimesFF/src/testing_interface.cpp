@@ -130,6 +130,13 @@ int main(int argc, char* argv[]) {
     double dist_ik; //distance between two atoms.
     std::vector<double> r_jk(3, 0.0); //x,y,z distance
     double dist_jk; //distance between two atoms.
+    std::vector<double> r_il(3, 0.0); //x,y,z distance
+    double dist_il; //distance between two atoms.
+    std::vector<double> r_jl(3, 0.0); //x,y,z distance
+    double dist_jl; //distance between two atoms.
+    std::vector<double> r_kl(3, 0.0); //x,y,z distance
+    double dist_kl; //distance between two atoms.
+    
     std::vector<int> typ_idxs{0, 0}; //type indexes to be passed to compute calls
     std::vector<int> all_typ_idxs; //type indexes for each atom.
 
@@ -156,7 +163,7 @@ int main(int argc, char* argv[]) {
 
             if (dist_ij >= maxcut)
                 continue;
-            
+            std::vector<int> typ_idxs{0, 0}; //type indexes to be passed to compute calls
             typ_idxs[0] = all_typ_idxs[i];
             typ_idxs[1] = all_typ_idxs[j];
             
@@ -197,7 +204,17 @@ int main(int argc, char* argv[]) {
                     if (dist_jk >= maxcut)
                         continue;
 
-                    typ_idxs.push_back(all_typ_idxs[k]);
+                    if (typ_idxs.size() == 2)
+                        typ_idxs.push_back(all_typ_idxs[k]);  
+                    else
+                        typ_idxs[2] = all_typ_idxs[k];
+
+                    // TODO think about - this should probably not
+                    // be a push if I think about it.  Check if chimes knows what size the type indexes should be
+                    // or if it just takes it from the input.
+                    // could push back on only the first iteration
+                    // and then reassign after that, recreate the vector in the loop instead of outside.
+                    // Should probably test this with a configuration that isnt all carbon.
 
                     // 3 body setup, some vectors needed to be created/modified to fit
                     std::vector<double> dx;
@@ -224,6 +241,62 @@ int main(int argc, char* argv[]) {
 
                     // Should now support three body interactions.
 
+                    // Need four body interactions now.
+                    if (order_4b > 0) {
+                        // Lets calculate some distances.
+
+                        for (int l = k + 1; l < natoms; l++) {
+                            dist_il = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, i, l, r_il);
+                            dist_jl = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, j, l, r_jl);
+                            dist_kl = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, k, l, r_kl);
+
+                            if (dist_ik >= maxcut_4b)
+                                continue;
+                            if (dist_jk >= maxcut_4b)
+                                continue;
+                            if (dist_il >= maxcut_4b)
+                                continue;
+                            if (dist_jl >= maxcut_4b)
+                                continue;
+                            if (dist_kl >= maxcut_4b)
+                                continue;
+                            
+                            //setup some of the data vectors to be passed in
+                            if (typ_idxs.size() == 3)
+                                typ_idxs.push_back(all_typ_idxs[l]);  
+                            else
+                                typ_idxs[3] = all_typ_idxs[l];
+                            
+                            std::vector<double> dx_4;
+                            dx_4.push_back(dist_ij);
+                            dx_4.push_back(dist_ik);
+                            dx_4.push_back(dist_il);
+                            dx_4.push_back(dist_jk);
+                            dx_4.push_back(dist_jl);
+                            dx_4.push_back(dist_kl);
+
+                            std::vector<double> r_4;
+                            r_4.insert(r_4.end(), r_ij.begin(), r_ij.end());
+                            r_4.insert(r_4.end(), r_ik.begin(), r_ik.end());
+                            r_4.insert(r_4.end(), r_il.begin(), r_il.end());
+                            r_4.insert(r_4.end(), r_jk.begin(), r_jk.end());
+                            r_4.insert(r_4.end(), r_jl.begin(), r_jl.end());
+                            r_4.insert(r_4.end(), r_kl.begin(), r_kl.end());
+
+                            std::vector<double> flat_force(12,0);
+
+                            chimes.compute_4B(dx_4, r_4, typ_idxs, flat_force, stress, energy, tmp_4b);
+
+                            for (int z = 0; z < 3; z++) {
+                                forces[i][z] += flat_force[z];
+                                forces[j][z] += flat_force[3 + z];
+                                forces[k][z] += flat_force[6 + z];
+                                forces[l][z] += flat_force[9 + z];
+                            }                            
+
+                        }
+                        
+                    }
                 }
             }
         }
