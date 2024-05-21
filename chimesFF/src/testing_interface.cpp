@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
     chimes4BTmp tmp_4b(order_4b);
 
     for (int i = 0; i < natoms; i++) {
-        chimes.compute_1B(all_typ_idxs[i], energy);
+        //chimes.compute_1B(all_typ_idxs[i], energy);
         for (int j = i + 1; j < natoms; j++) {
             dist_ij = get_dist(lx, ly, lz, xcrd, ycrd, zcrd, i, j, r_ij);
 
@@ -204,10 +204,14 @@ int main(int argc, char* argv[]) {
                     if (dist_jk >= maxcut)
                         continue;
 
-                    if (typ_idxs.size() == 2)
-                        typ_idxs.push_back(all_typ_idxs[k]);  
-                    else
-                        typ_idxs[2] = all_typ_idxs[k];
+                    //if (typ_idxs.size() == 2)
+                        //typ_idxs.push_back(all_typ_idxs[k]);  
+                    //else
+                        //typ_idxs[2] = all_typ_idxs[k];
+                    std::vector<int> typ_idxs{0,0,0};
+                    typ_idxs[0] = all_typ_idxs[i];
+                    typ_idxs[1] = all_typ_idxs[j];
+                    typ_idxs[2] = all_typ_idxs[k];
 
                     // TODO think about - this should probably not
                     // be a push if I think about it.  Check if chimes knows what size the type indexes should be
@@ -230,8 +234,22 @@ int main(int argc, char* argv[]) {
 
                     std::vector<double> flat_force(9,0);
 
-                    chimes.compute_3B(dx, r, typ_idxs, flat_force, stress, energy, tmp_3b);
+                    #ifdef debug
+                    std::cout << dist_ij << " " << dist_ik << " " << dist_jk << std::endl;
+                    for (auto m = 0; m < r.size(); m++) {
+                        std::cout << r[m] << std::endl;
+                    }
 
+                    for (auto m = 0; m < typ_idxs.size(); m++) {
+                        std::cout << typ_idxs[m] << std::endl;
+                    }
+                    #endif
+
+                    chimes.compute_3B(dx, r, typ_idxs, flat_force, stress, energy, tmp_3b);
+                    #ifdef debug
+                    std::cout << energy << std::endl;
+                    exit(1);
+                    #endif
                     //update forces after the call to three_b has been created.
                     for (int l = 0; l < 3; l++) {
                         forces[i][l] += flat_force[l];

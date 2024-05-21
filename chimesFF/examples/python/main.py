@@ -142,6 +142,10 @@ for i in range(natoms):
 				if dist_jk >= maxcut:
 					continue
 				
+				print([dist_ij,    dist_ik,    dist_jk])
+				print([r_ij,       r_ik,       r_jk])
+				print([atmtyps[i], atmtyps[j], atmtyps[k]])
+				
 				tmp_force, stress, energy = chimescalc_py.chimes_compute_3b_props(
 					[dist_ij,    dist_ik,    dist_jk],
 			 		[r_ij,       r_ik,       r_jk],
@@ -149,6 +153,9 @@ for i in range(natoms):
 					[forces[i],  forces[j],  forces[k] ],
 					stress, 
 					energy)
+
+				print(energy)
+				sys.exit()
 
 				forces[i][0] = tmp_force[0][0]; forces[i][1] = tmp_force[0][1]; forces[i][2] = tmp_force[0][2]
 				forces[j][0] = tmp_force[1][0]; forces[j][1] = tmp_force[1][1]; forces[j][2] = tmp_force[1][2]
