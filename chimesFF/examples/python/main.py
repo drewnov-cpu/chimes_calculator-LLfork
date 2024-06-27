@@ -47,7 +47,7 @@ def get_dist(lx,ly,lz,xcrd,ycrd,zcrd,i,j):  # does this work? xrd isnt used.
 
 # Initialize the ChIMES calculator
 
-chimescalc_py.chimes_wrapper = chimescalc_py.init_chimes_wrapper("libchimescalc-direct_dl.so")
+chimescalc_py.chimes_wrapper = chimescalc_py.init_chimes_wrapper(os.getcwd() + "/libchimescalc-direct_dl.so")
 chimescalc_py.set_chimes()
 chimescalc_py.init_chimes()
 

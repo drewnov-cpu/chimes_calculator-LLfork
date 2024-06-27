@@ -33,6 +33,7 @@ if [ -z "$hosttype" ] ; then
     echo "WARNING: No hosttype specified"
     echo "Be sure to load modules/configure compilers by hand before running this script!"
     echo ""
+    
 elif [[ "$hosttype" == "LLNL-LC" ]] ; then
     source modfiles/LLNL-LC.mod
     ICC=`which icc`
@@ -87,8 +88,10 @@ else
 	my_flags="${my_flags} -DDEBUG=0 -DCMAKE_BUILD_TYPE=Release" 
 fi
 
-# Setup, make and install
+#my_flags="$my_flags -DCMAKE_CXX_COMPILER=/usr/bin/nvcc"
 
+# Setup, make and install
+echo $my_flags
 cmake $my_flags ..
 make
 if [ ! -z $PREFX ] ; then

@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.13)
 project(ChimesCalc
     VERSION 1.0
     DESCRIPTION "ChIMES calculator: Utilities to compute ChIMES interactions"
-  	LANGUAGES CXX C)
+  	LANGUAGES CXX C CUDA)
 
 string(TOLOWER "${PROJECT_NAME}" PROJECT_NAME_LOWER)
 
@@ -29,18 +29,21 @@ if(NEEDS_LIB_M)
 endif()
 
 
+
 ####################################################################################################
 # Static/shared library
 ####################################################################################################
 
 set(c-sources
-    "chimesFF/src/chimesFF.cpp"
+    "chimesFF/src/chimesFF.cu"
+    "chimesFF/src/gpu_compute.cu"
     "chimesFF/api/chimescalc_C.cpp"
     "serial_interface/src/serial_chimes_interface.cpp"
     "serial_interface/api/chimescalc_serial_C.cpp")
 
 set(c-includes
     "chimesFF/src/chimesFF.h"
+    "chimesFF/src/gpu_compute.h"
     "chimesFF/api/chimescalc_C.h"
     "serial_interface/src/serial_chimes_interface.h"
     "serial_interface/api/chimescalc_serial_C.h")
@@ -48,7 +51,7 @@ set(c-includes
 add_library(ChimesCalc "${c-sources}")
 
 set_target_properties(ChimesCalc
-    PROPERTIES
+    PROPERTIES CUDA_SEPARABLE_COMPILATION ON
     OUTPUT_NAME "chimescalc"
     PUBLIC_HEADER "${c-includes}")
 
@@ -60,6 +63,9 @@ target_include_directories(ChimesCalc PUBLIC
     $<INSTALL_INTERFACE:${INSTALL_INCLUDEDIR}>)
 
 target_compile_definitions(ChimesCalc PRIVATE "DEBUG=${DEBUG}")
+target_compile_options(ChimesCalc PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       -arch=sm_70 -rdc=true --compiler-options -fPIC
+                       >)
 target_compile_features(ChimesCalc PRIVATE cxx_std_11)
 
 install(TARGETS ChimesCalc
@@ -74,8 +80,11 @@ install(TARGETS ChimesCalc
 
 # Main executable installed as chimescalc
 add_executable(ChimesCalcExe serial_interface/examples/cpp/main.cpp)
-set_target_properties(ChimesCalcExe PROPERTIES OUTPUT_NAME "chimescalc")
+set_target_properties(ChimesCalcExe PROPERTIES OUTPUT_NAME "chimescalc" CUDA_SEPARABLE_COMPILATION ON)
 target_link_libraries(ChimesCalcExe ChimesCalc)
+target_compile_options(ChimesCalcExe PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       -arch=sm_70 -rdc=true --compiler-options -fPIC
+                       >)
 target_compile_features   (ChimesCalcExe PUBLIC cxx_std_11)
 target_compile_definitions(ChimesCalcExe PRIVATE "DEBUG=${DEBUG}")
 
@@ -100,7 +109,8 @@ target_compile_definitions(chimescalc-test_serial-C PRIVATE "DEBUG=${DEBUG}")
 add_library(ChimesCalc_dynamic MODULE "${c-sources}")
 
 set_target_properties(ChimesCalc_dynamic
-    PROPERTIES OUTPUT_NAME "chimescalc_dl")
+    PROPERTIES CUDA_SEPARABLE_COMPILATION ON
+    OUTPUT_NAME "chimescalc_dl" )
 
 target_include_directories(ChimesCalc_dynamic PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/chimesFF/src>
@@ -111,6 +121,9 @@ target_include_directories(ChimesCalc_dynamic PUBLIC
 
 target_compile_definitions(ChimesCalc_dynamic PRIVATE "DEBUG=${DEBUG}")
 target_compile_features(ChimesCalc_dynamic PRIVATE cxx_std_11)
+target_compile_options(ChimesCalc_dynamic PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:
+                       -arch=sm_70 -rdc=true --compiler-options -fPIC
+                       >)
 
 install(TARGETS ChimesCalc_dynamic
     EXPORT ${PROJECT_NAME_LOWER}-targets

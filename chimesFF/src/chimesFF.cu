@@ -1841,9 +1841,6 @@ void chimesFF::compute_3B(const vector<double> & dx, const vector<double> & dr, 
         std::cout << "An error occured at line 1830" << std::endl;
         exit(1);
     }
-    // These arrays should just decay to a pointer, which should make this
-    // acceptable I think.  But make sure to print these out in testing
-    // to make sure the data is actually being transferred.
     
     
     
@@ -2145,10 +2142,6 @@ void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, 
     fcut_5[5] = fcut[0] * fcut[1] * fcut[2] * fcut[3] * fcut[4] / dx[5] ;
     
     // Start the force/stress/energy calculation
-        
-    //double coeff;
-    //int powers[npairs] ;
-    //double force_scalar[npairs] ;
 
     // Begin setting up the pointers for the GPU.
 
@@ -2189,7 +2182,6 @@ void chimesFF::compute_4B(const vector<double> & dx, const vector<double> & dr, 
     cudaMemcpyToSymbol(fcut5_4b, fcut_5, npairs * sizeof(double));
     cudaMemcpyToSymbol(dr_4b, dr.data(), dr.size() * sizeof(double));
     cudaMemcpyToSymbol(pair_idx_4b, mapped_pair_idx.data(), mapped_pair_idx.size() * sizeof(int));
-
     #ifdef USE_DISTANCE_TENSOR
         cudaMemcpyToSymbol(dr2_4b, dr2, sizeof(dr2_4b));
     #endif

@@ -1,5 +1,5 @@
 
-CXX   = g++ -O3 -std=c++11
+CXX   = nvcc -O3 -arch=sm_70 -rdc=true
 DEBUG = 1
 
 CXX_LOC = $(realpath .)

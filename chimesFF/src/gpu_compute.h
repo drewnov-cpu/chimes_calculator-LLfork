@@ -30,7 +30,8 @@ extern __constant__ double fcutderiv_4b[6];
     extern __constant__ double dr2_4b[CHDIM*CHDIM*6*6]; // npairs = 6
 #endif
 extern __constant__ double fcut5_4b[6];
-extern __constant__ double dr_4b[6];
+//extern __constant__ double gpu_dx[6];
+extern __constant__ double dr_4b[6* CHDIM];
 extern __constant__ int pair_idx_4b[6];
 
 

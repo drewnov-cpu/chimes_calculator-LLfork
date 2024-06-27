@@ -1,9 +1,9 @@
 CC_LOC = $(realpath .)
 
-CXX=g++ -O3 -std=c++11 -fPIC
+CXX=nvcc -O3 -arch=sm_70 -rdc=true --compiler-options -fPIC
 
-CHIMESFF_SRC=$(CC_LOC)/../../src/chimesFF.cpp
-CHIMESFF_HDR=$(CC_LOC)/../../src/chimesFF.h
+CHIMESFF_SRC=$(CC_LOC)/../../src/chimesFF.cu $(CC_LOC)/../../src/gpu_compute.cu
+CHIMESFF_HDR=$(CC_LOC)/../../src/chimesFF.h $(CC_LOC)/../../src/gpu_compute.h
 
 chimesFF.o : $(CHIMESFF_SRC)
 	$(CXX) -c $(CHIMESFF_SRC)

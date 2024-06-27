@@ -22,7 +22,8 @@ __constant__ double fcutderiv_4b[6];
     __constant__ double dr2_4b[CHDIM*CHDIM*6*6]; // npairs = 6
 #endif
 __constant__ double fcut5_4b[6];
-__constant__ double dr_4b[6];
+//__constant__ double gpu_dx[6];
+__constant__ double dr_4b[6 * CHDIM];
 __constant__ int pair_idx_4b[6];
 
 
@@ -226,6 +227,7 @@ double *chimes_params, int *chimes_pows, double *force, double *stress, poly_poi
         deriv[4] = fcut_4b[4] * cheby.Tnd_jl[powers[4]] + fcutderiv_4b[4] * cheby.Tn_jl[powers[4]];
         deriv[5] = fcut_4b[5] * cheby.Tnd_kl[powers[5]] + fcutderiv_4b[5] * cheby.Tn_kl[powers[5]];
 
+
         double force_scalar[6];
 
         force_scalar[0]  = coeff * deriv[0] * fcut5_4b[0] * cheby.Tn_ik[powers[1]] * cheby.Tn_il[powers[2]] * Tn_jk_jl * Tn_kl_5;
@@ -237,6 +239,7 @@ double *chimes_params, int *chimes_pows, double *force, double *stress, poly_poi
 
         // Accumulate forces/stresses on/from the ij pair
         
+
         atomicAdd(&(force[0*CHDIM+0]), force_scalar[0] * dr_4b[0*CHDIM+0]);
         atomicAdd(&(force[0*CHDIM+1]), force_scalar[0] * dr_4b[0*CHDIM+1]);
         atomicAdd(&(force[0*CHDIM+2]), force_scalar[0] * dr_4b[0*CHDIM+2]);

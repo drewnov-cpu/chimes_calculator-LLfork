@@ -19,7 +19,6 @@ option(BUILD_SHARED_LIBS "Whether the libraries built should be shared" TRUE)
 set(TEST_LABELS ".*" CACHE STRING "List of test label regexps to include as test in CMake builds")
 
 
-# C++ compiler dependent config options
 if("GNU" STREQUAL "${CMAKE_CXX_COMPILER_ID}")
 
     set(CXX_FLAGS "${CMAKE_CXX_FLAGS}"
@@ -43,6 +42,7 @@ elseif("Intel" STREQUAL "${CMAKE_CXX_COMPILER_ID}")
         CACHE STRING "C compiler flags for Debug build")
 
 endif()
+
 
 
 # C compiler dependent config options

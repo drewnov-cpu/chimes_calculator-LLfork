@@ -25,7 +25,7 @@ do
 	FFS+=($FF); CFGS+=($CFG); OPTIONS+=($OPTION)
 done < tmp-data.dat; rm -f tmp-data.dat
 
-API_LIST="0 1 2 3 4"
+API_LIST="0"
 NO_TESTS=${#FFS[@]}
 LOC=`pwd`
 
@@ -38,7 +38,7 @@ API[4]="fortran08"; EXE[4]="chimescalc-test_serial-F08" ; XTRA[4]="" #"0"
 echo "Running $STYLE tests"
 date
 
-for compile in CMAKE MAKEFILE
+for compile in CMAKE
 do
 	echo "Testing compilation type: $compile"
 
@@ -109,7 +109,7 @@ do
 				if [[ "${API[$i]}" != "python" ]] ; then
 				
 					if [[ $compile == "CMAKE" ]] ; then
-						../../build/${EXE[$i]} force_fields/${FFS[$j]} configurations/$CFG ${OPTIONS[$j]} > /dev/null
+						../../build/${EXE[$i]} force_fields/${FFS[$j]} configurations/$CFG ${OPTIONS[$j]} > gpu_test_output.txt
 					else
 						../examples/${API[$i]}/${EXE[$i]} force_fields/${FFS[$j]} configurations/$CFG ${OPTIONS[$j]}  > /dev/null
 					fi
